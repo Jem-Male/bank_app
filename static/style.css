@@ -1,0 +1,19 @@
+*{
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: sans-serif;
+    background-color: #f4f4f4;
+    padding: 20px;
+}
+header {
+    background: #333;
+    color: #fff;
+    padding: 10px;
+}
+header a {
+    color: #fff;
+    margin-left: 10px;
+}

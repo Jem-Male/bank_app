@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <header>
+        <h1>Мой банк</h1>
+        <nav>
+            <a href="/"></a>
+            <a href="/"></a>
+            <a href="/"></a>
+        </nav>
+    </header>
+    <main>
+        {% block main %}{% endblock main %}
+    </main>
+    <footer>
+        <p>&copy; 2025 Bank Project</p>
+    </footer>
+</body>
+</html>

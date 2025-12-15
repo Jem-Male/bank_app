@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+
+{% block main %}
+
+<h2>Регистрация нового клиента</h2>
+
+<!-- 
+    action="" означает "отправь данные на этот же адрес"
+    method="post" означает "спрячь данные внутрь запроса" (не в адресной строке)
+-->
+<form action="/register" method="POST">
+    <label for="first_name">Фамилия</label>
+    <input type="text" name="first_name" required>
+
+    <label for="last_name">Имя</label>
+    <input type="text" name="last_name" required>
+
+    <label for="middle_name">Отчество</label>
+    <input type="text" name="middle_name">
+
+    <label for="password">Пароль</label>
+    <input type="password" name="password" required>
+
+    <label for="email">Электронная почта</label>
+    <input type="text" name="email">
+
+    <label for="phone">Номер телефона</label>
+    <input type="text" name="phone" required>
+
+    <button type="submit">Отправить</button>
+</form>
+{% endblock main %}
