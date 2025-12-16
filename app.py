@@ -2,7 +2,7 @@ from flask import Flask, render_template, url_for, request, session, redirect
 import mysql.connector
 from mysql.connector import Error
 import time
-from werkzeug.security import generate_password_hash, check_password_hash # <--- 1. Импорт
+from werkzeug.security import generate_password_hash, check_password_hash # для хеширование паролей
 from config import MYSQL_CONFIG, SECRET_KEY
 import random
 
@@ -43,7 +43,8 @@ def get_users():
         # Закрываем соединение, чтобы не висело в Process List
         conn.close()
         
-        return render_template('users.html', users=data, title='Пользователи')
+        return redirect(url_for('user_login')) # теперь после регистрации пользователя перенаправляют на страницу входа
+    
     except Error as e:
         return f"Ошибка при выполнении запроса: {e}", 500
 
@@ -111,27 +112,39 @@ def user_registration():
 @app.route('/login', methods=['GET','POST'])
 def user_login():
     if request.method == 'POST':
+        
         login_input = request.form.get('login_input')
         password = request.form.get('password')
         
         try:
             conn = get_db()
             cur = conn.cursor(dictionary=True)
+            
             sql_select = """
             SELECT last_name, id, password, phone, email from users
             WHERE (email = %s or phone = %s) and is_deleted = 0;
             """
+            
             value = (login_input, login_input)
             cur.execute(sql_select, value)
+            
             res = cur.fetchone()
+            
             cur.close()
             conn.close()
+            
+            # если пользователь не найден - создаем флаг с ошибкой
+            # так удобнее создавать ошибки и явно указывать что не так
+            # и лишь в конце дать готовый ответ со страницой
             if res is None:
                 invalid = 'Такого пользователя нет'
                 
+            # check_password_hash() - медот для проверки пароля
+            # сперва хэш потом то что ввел пользователь
             elif check_password_hash(res['password'], password):
-                session['user_id'] = res['id'] 
                 
+                # тут создается session по его id
+                session['user_id'] = res['id'] 
                 return redirect(url_for('profile'))
             
             else:
@@ -147,16 +160,26 @@ def user_login():
 
 @app.route('/me')
 def profile():
+    """Страница профиля"""
+    
+    # здесь мы пробуем получить сессию от пользователя
+    # а именно пытаемся получить его id чтобы найти его в БД
     user_id = session.get('user_id')
+    
+    # если сессии нет опять перенаправляем его на страницу входа
     if user_id is None:
+        
         return redirect(url_for('user_login'))
     try:
+        # танцы с бубнами ради подключения к БД чтобы получить пользователя по его id
         conn = get_db()
         cur = conn.cursor(dictionary=True)
+        
         sql_select = """
         SELECT id, last_name, middle_name, password, phone, email , card_number, balance from users
         WHERE id = %s and is_deleted = 0;
         """
+        
         value = (user_id,)
         cur.execute(sql_select, value)
         res = cur.fetchone()
@@ -166,6 +189,18 @@ def profile():
     except Error as e:
         return f"ошибка подключения к БД - {e}"
     
+    # если такого пользователя нет или же он уже удален - (is_deleted = 1, True)
+    # то мы удаляем его протухшие куки
+    # ведь уже тут он смог пройти проверку на наличия session
+    if res is None:
+        
+        # удаляем через метод pop() 
+        # но если все же у метода не получится найти user_id session то просто возвращает None
+        # то етсь мягкое удаление
+        session.pop('user_id', None)
+        # как бы мы говорим - удалить! = ничего
+        # метод такой - оке, "удали ничего"
+        
     return render_template('profile.html', user = res)
 
 @app.route('/test', methods=['GET'])
