@@ -1,11 +1,14 @@
-from flask import Flask, render_template, url_for, request
+from flask import Flask, render_template, url_for, request, session, redirect
 import mysql.connector
 from mysql.connector import Error
 import time
-from config import MYSQL_CONFIG
+from werkzeug.security import generate_password_hash, check_password_hash # <--- 1. Импорт
+from config import MYSQL_CONFIG, SECRET_KEY
 import random
 
 app = Flask(__name__)
+app.secret_key = SECRET_KEY
+
 
 def get_db():
     try:
@@ -24,7 +27,7 @@ def index():
 
 
 @app.route('/users', methods=['GET'])
-def get_user():
+def get_users():
     conn = get_db()
     if conn is None:
         return f"Ошибка к подключению БД", 500
@@ -55,43 +58,115 @@ def user_registration():
         email = request.form.get('email')
         phone = request.form.get('phone')
         
+        # 1. Получаем Email
+        # Если поле пустое, .get() вернет пустую строку ''. 
+        # Конструкция (A or B) вернет B, если A пустое.
+        # То есть email станет None, если пользователь ничего не ввел.
+        email = request.form.get('email') or None
+        
         # логируем регистрированного пользователя в ком.строку
         print(f"новые данные: {first_name}, {phone}")
         
-        # создаем соединения и курсор для работы с БД
-        conn = get_db()
-        cur = conn.cursor()
-        
-        # значения для вставки в mysql - список для того что бы была возможность адаптивности
-        sql_values = [first_name, last_name, middle_name, password, phone, random.randint(100000000000, 999999999999)]
-        
-        # есть ли почта? да создаем поле и дданные, нет оставляем все пустым
-        if email:
-            s = ', %s'
-            sql_values.append(email)
-            e = ', `email`'
-        else:
-            s = ''
-            e= ''
-        
-        # создаем запрос добавления без данных
-        sql_into = f"""
-        INSERT INTO users(`first_name`, `last_name`, `middle_name`, `password`, `phone`, `card_number`{e}) 
-        VALUES (%s, %s, %s, %s, %s, %s{s});
+        # 2. Создаем SQL запрос
+        # Обрати внимание: мы ВСЕГДА пишем `email` и `%s`.
+        # Мы не меняем текст запроса.
+        sql_into = """
+            INSERT INTO users
+            (first_name, last_name, middle_name, password, phone, card_number, email) 
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
         """
         
-        # вставляем данные
-        cur.execute(sql_into, tuple(sql_values))
+        # 3. Собираем значения
+        # Если в переменной email лежит None, в базу запишется NULL.
+        # Если там "mail@mail.ru", запишется строка.
+        # Генерацию карты тоже лучше вынести в переменную для читаемости.
+        hashed_password = generate_password_hash(password)
+        card_num = str(random.randint(100000000000, 999999999999))
         
-        # сохраняем и закрываем соединения
-        conn.commit()
-        cur.close()
-        conn.close()
+        # создаем значения для values
+        vals = (first_name, last_name, middle_name, hashed_password, phone, card_num, email)
         
-        return f"Вставка прошла успешно"
+        try:
+            # создаем соединения и курсор для работы с БД
+            conn = get_db()
+            cur = conn.cursor()
+            
+            # 4. Выполняем
+            cur.execute(sql_into, vals)
+            
+            # сохраняем и закрываем соединения
+            conn.commit()
+            cur.close()
+            conn.close()
+            
+            return f"Вставка прошла успешно"
+        
+        
+        except Error as e:
+            return f"Ошибка sql - {e}"
             
     return render_template('register.html', title='Регистрация')
 
+
+@app.route('/login', methods=['GET','POST'])
+def user_login():
+    if request.method == 'POST':
+        login_input = request.form.get('login_input')
+        password = request.form.get('password')
+        
+        try:
+            conn = get_db()
+            cur = conn.cursor(dictionary=True)
+            sql_select = """
+            SELECT last_name, id, password, phone, email from users
+            WHERE (email = %s or phone = %s) and is_deleted = 0;
+            """
+            value = (login_input, login_input)
+            cur.execute(sql_select, value)
+            res = cur.fetchone()
+            cur.close()
+            conn.close()
+            if res is None:
+                invalid = 'Такого пользователя нет'
+                
+            elif check_password_hash(res['password'], password):
+                session['user_id'] = res['id'] 
+                
+                return redirect(url_for('profile'))
+            
+            else:
+                invalid = 'Неверный пароль'
+            
+            return render_template('login.html', invalid = invalid)
+        
+        except Error as e:
+            return f"ошибка - {e}"
+         
+    return render_template('login.html', invalid = 0)
+
+
+@app.route('/me')
+def profile():
+    user_id = session.get('user_id')
+    if user_id is None:
+        return redirect(url_for('user_login'))
+    try:
+        conn = get_db()
+        cur = conn.cursor(dictionary=True)
+        sql_select = """
+        SELECT id, last_name, middle_name, password, phone, email , card_number, balance from users
+        WHERE id = %s and is_deleted = 0;
+        """
+        value = (user_id,)
+        cur.execute(sql_select, value)
+        res = cur.fetchone()
+        cur.close()
+        conn.close()
+        
+    except Error as e:
+        return f"ошибка подключения к БД - {e}"
+    
+    return render_template('profile.html', user = res)
 
 @app.route('/test', methods=['GET'])
 def get_request():

@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block main %}
+<h3>Мой профиль</h3>
+<H4>данные</H4>
+<br/><br/>
+<span>{{ user['last_name'] }}</span>
+<br/><br/>
+<span>{{ user['middle_name'] }}</span>
+<br/><br/>
+<span>{{ user['phone'] }}</span>
+<br/><br/>
+{% if user['email'] %}
+<span>{{ user['email'] }}</span>
+<br/><br/>
+{% endif %}
+<span>{{ user['card_number'] }}</span>
+<br/><br/>
+<span>{{ user['balance'] }}</span>
+<br/><br/>
+{% endblock main %}

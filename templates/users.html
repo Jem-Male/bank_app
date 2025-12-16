@@ -3,6 +3,7 @@
 {% block main %}
     <h3>Данные пользователей:</h3>
     {% if users %}
+    <br/><br/>
     <table border="1" cellpadding="10">
         <thead>
             <tr>
@@ -25,7 +26,10 @@
             {% endfor %}
         </tbody>
     </table>
+    <br/><br/>
     {% else %}
+        <br/><br/>
         <h1>Пользователей нет</h1>
+        <br/><br/>
     {% endif %}
 {% endblock main %}

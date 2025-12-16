@@ -4,3 +4,4 @@ MYSQL_CONFIG = {
     'password':'7473',
     'database' :'bank'
 }
+SECRET_KEY = '8JBHUYVG*H(uijhu gyviU)'

@@ -3,6 +3,10 @@
     padding: 0;
 }
 
+:root{
+    /* добавть цвета */
+}
+
 body {
     font-family: sans-serif;
     background-color: #f4f4f4;

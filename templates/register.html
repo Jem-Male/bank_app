@@ -11,22 +11,25 @@
 <form action="/register" method="POST">
     <label for="first_name">Фамилия</label>
     <input type="text" name="first_name" required>
-
+    <br/><br/>
     <label for="last_name">Имя</label>
     <input type="text" name="last_name" required>
-
+    <br/><br/>
     <label for="middle_name">Отчество</label>
     <input type="text" name="middle_name">
-
+    <br/><br/>
     <label for="password">Пароль</label>
     <input type="password" name="password" required>
-
+    <br/><br/>
     <label for="email">Электронная почта</label>
     <input type="text" name="email">
-
+    <br/><br/>
     <label for="phone">Номер телефона</label>
     <input type="text" name="phone" required>
-
+    <br/><br/>
     <button type="submit">Отправить</button>
 </form>
+<a href="{{ url_for('user_login') }}">
+    регистрация
+</a>
 {% endblock main %}

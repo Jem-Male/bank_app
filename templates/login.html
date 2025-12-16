@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block main %}
+<h2>Вход</h2>
+<!-- 
+    action="" означает "отправь данные на этот же адрес"
+    method="post" означает "спрячь данные внутрь запроса" (не в адресной строке)
+-->
+<form action="/login" method="POST">
+    <label for="login_input">Электронная почта или номер телефона</label>
+    <input input type="text" name="login_input" placeholder="+7... или mail@..." required>
+    <br/><br/>
+    <label for="password">Пароль</label>
+    <input type="password" name="password" required>
+    <br/><br/>
+    <button type="submit">Отправить</button>
+</form>
+
+<a href="{{ url_for('user_registration') }}">
+    регистрация
+</a>
+{% if invalid %}
+<h3 style="color: red; font-weight: bold">
+    {{invalid}}
+</h3>
+{% endif %}
+{% endblock main %}
