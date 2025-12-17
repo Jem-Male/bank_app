@@ -4,23 +4,12 @@ from mysql.connector import Error
 import time
 from werkzeug.security import generate_password_hash, check_password_hash # для хеширование паролей
 from config import MYSQL_CONFIG, SECRET_KEY
+from database import get_all_users, create_user, get_user_by_info, get_user_by_id
 import random
 
 app = Flask(__name__)
 # для сесии
 app.secret_key = SECRET_KEY
-
-
-def get_db():
-    """подключения к БД чтобы получить объект подключение - connection"""
-    try:
-        connection = mysql.connector.connect(**MYSQL_CONFIG)
-        return connection
-    
-    except Error as e:
-        print("Ошибка соединения: {e}")
-        return None
-    
 
 
 @app.route('/', methods=['GET'])
@@ -31,26 +20,10 @@ def index():
 
 @app.route('/users', methods=['GET'])
 def get_users():
-    """получаем всех пользователей"""
-    conn = get_db()
-    if conn is None:
-        return f"Ошибка к подключению БД", 500
-    try:
-        # dictionary=True ставим ЗДЕСЬ. Это настройка "пальца", а не "телефона"
-        cur = conn.cursor(dictionary=True)
-        cur.execute('SELECT * FROM users')
-        data = cur.fetchall()
-        
-        # Данные получили, курсор больше не нужен
-        cur.close()
-        
-        # Закрываем соединение, чтобы не висело в Process List
-        conn.close()
-        
-        return render_template('users.html', users=data, title='Пользователи')
-    
-    except Error as e:
-        return f"Ошибка при выполнении запроса: {e}", 500
+    data = get_all_users()
+    if data == None:
+        return f"Данных нет", 500
+    return render_template('users.html', users=data, title='Пользователи')
 
 
 @app.route('/register', methods=['GET','POST'])
@@ -73,15 +46,6 @@ def user_registration():
         # логируем регистрированного пользователя в ком.строку
         print(f"новые данные: {first_name}, {phone}")
         
-        # 2. Создаем SQL запрос
-        # Обрати внимание: мы ВСЕГДА пишем `email` и `%s`.
-        # Мы не меняем текст запроса.
-        sql_into = """
-            INSERT INTO users
-            (first_name, last_name, middle_name, password, phone, card_number, email) 
-            VALUES (%s, %s, %s, %s, %s, %s, %s)
-        """
-        
         # 3. Собираем значения
         # Если в переменной email лежит None, в базу запишется NULL.
         # Если там "mail@mail.ru", запишется строка.
@@ -90,53 +54,21 @@ def user_registration():
         card_num = str(random.randint(100000000000, 999999999999))
         
         # создаем значения для values
-        vals = (first_name, last_name, middle_name, hashed_password, phone, card_num, email)
-        
+        vals = (first_name, last_name, middle_name, hashed_password, phone, email, card_num)
         try:
-            # создаем соединения и курсор для работы с БД
-            conn = get_db()
-            cur = conn.cursor(dictionary=True)
             
-            # 4. Выполняем
-            cur.execute(sql_into, vals)
-            
-            # !!лучше использовать - result = cur.lastrowid!!
-            # каждый пользователь → отдельная трубка
-            # lastrowid лежит внутри трубки
-            # чужие данные туда не попадают
-            # ✔ cur.lastrowid потокобезопасен
-            # ✔ параллельные регистрации не конфликтуют
-            # ✔ чужой id не прилетит
-
-            
-                    
-# # здесь просто ищем подзователя чтобы вернуть ему его id
-# sql_select = """
-# SELECT id from users
-# WHERE (email = %s or phone = %s) and is_deleted = 0;
-# """
-
-# value = (email, phone)
-# cur.execute(sql_select, value)
-
-# res = cur.fetchone()
-        
-            # получить id вставленного пользователя
-            new_user_id = cur.lastrowid
-            
-            # сохраняем изменения
-            conn.commit()           
-            
-            cur.close()
-            conn.close()
+            new_user_id = create_user(vals)
+            if new_user_id is False:
+                return f"Ошибка такой пользовател существует"
             
             session['user_id'] = new_user_id
             
             return redirect(url_for('profile'))
         
         except Error as e:
-            return f"Ошибка sql - {e}"
             
+            return f"Ошибка sql - {e}"
+        
     return render_template('register.html', title='Регистрация')
 
 
@@ -148,44 +80,23 @@ def user_login():
         login_input = request.form.get('login_input')
         password = request.form.get('password')
         
-        try:
-            conn = get_db()
-            cur = conn.cursor(dictionary=True)
-            
-            sql_select = """
-            SELECT last_name, id, password, phone, email from users
-            WHERE (email = %s or phone = %s) and is_deleted = 0;
-            """
-            
-            value = (login_input, login_input)
-            cur.execute(sql_select, value)
-            
-            res = cur.fetchone()
-            
-            cur.close()
-            conn.close()
-            
-            # если пользователь не найден - создаем флаг с ошибкой
-            # так удобнее создавать ошибки и явно указывать что не так
-            # и лишь в конце дать готовый ответ со страницой
-            if res is None:
-                invalid = 'Такого пользователя нет'
-                
-            # check_password_hash() - медот для проверки пароля
-            # сперва хэш потом то что ввел пользователь
-            elif check_password_hash(res['password'], password):
-                
-                # тут создается session по его id
-                session['user_id'] = res['id'] 
-                return redirect(url_for('profile'))
-            
-            else:
-                invalid = 'Неверный пароль'
-            
-            return render_template('login.html', invalid = invalid)
+        res = get_user_by_info(login_input, login_input)
         
-        except Error as e:
-            return f"ошибка - {e}"
+        if res is None:
+            invalid = 'Такого пользователя нет'
+            
+        # check_password_hash() - медот для проверки пароля
+        # сперва хэш потом то что ввел пользователь
+        elif check_password_hash(res['password'], password):                
+            
+            # тут создается session по его id
+            session['user_id'] = res['id'] 
+            return redirect(url_for('profile'))
+            
+        else:
+            invalid = 'Неверный пароль'
+            
+        return render_template('login.html', invalid = invalid)
          
     return render_template('login.html', invalid = 0)
 
@@ -196,31 +107,14 @@ def profile():
     
     # здесь мы пробуем получить сессию от пользователя
     # а именно пытаемся получить его id чтобы найти его в БД
-    user_id = session.get('user_id')
+    user_id = session.get('user_id') or None
     
     # если сессии нет опять перенаправляем его на страницу входа
     if user_id is None:
-        
         return redirect(url_for('user_login'))
-    try:
-        # танцы с бубнами ради подключения к БД чтобы получить пользователя по его id
-        conn = get_db()
-        cur = conn.cursor(dictionary=True)
-        
-        sql_select = """
-        SELECT id, last_name, middle_name, password, phone, email , card_number, balance from users
-        WHERE id = %s and is_deleted = 0;
-        """
-        
-        value = (user_id,)
-        cur.execute(sql_select, value)
-        res = cur.fetchone()
-        cur.close()
-        conn.close()
-        
-    except Error as e:
-        return f"ошибка подключения к БД - {e}"
     
+    res = get_user_by_id(user_id)
+   
     # если такого пользователя нет или же он уже удален - (is_deleted = 1, True)
     # то мы удаляем его протухшие куки
     # ведь уже тут он смог пройти проверку на наличия session

@@ -97,3 +97,11 @@ def get_new_user():
      conn.close()
 
      session['user_id'] = new_user_id
+     
+# в будущем надо будет добавить декоратор для БД
+
+from database import create_user
+
+
+v = ('в', 'в', 'в', 'scrypt:32768:8:1$Zlmj0v1O17XisnGm$f186db3b5863ff67a7ed0bc5d115cb2efed8add34664871fe7ee876fddb1194ec119b72b35277887405b952a042eeeff2a5c7296e8fda779023bd7de3835159f', ',33654', 'Электронная почта 6', '769316277979')
+create_user(v)
