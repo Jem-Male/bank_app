@@ -7,10 +7,12 @@ from config import MYSQL_CONFIG, SECRET_KEY
 import random
 
 app = Flask(__name__)
+# для сесии
 app.secret_key = SECRET_KEY
 
 
 def get_db():
+    """подключения к БД чтобы получить объект подключение - connection"""
     try:
         connection = mysql.connector.connect(**MYSQL_CONFIG)
         return connection
@@ -23,11 +25,13 @@ def get_db():
 
 @app.route('/', methods=['GET'])
 def index():
+    """главная страница"""
     return render_template('index.html', title='Главная - Банк')
 
 
 @app.route('/users', methods=['GET'])
 def get_users():
+    """получаем всех пользователей"""
     conn = get_db()
     if conn is None:
         return f"Ошибка к подключению БД", 500
@@ -43,7 +47,7 @@ def get_users():
         # Закрываем соединение, чтобы не висело в Process List
         conn.close()
         
-        return redirect(url_for('user_login')) # теперь после регистрации пользователя перенаправляют на страницу входа
+        return render_template('users.html', users=data, title='Пользователи')
     
     except Error as e:
         return f"Ошибка при выполнении запроса: {e}", 500
@@ -51,6 +55,7 @@ def get_users():
 
 @app.route('/register', methods=['GET','POST'])
 def user_registration():
+    """для создания нового пользоватеья + регистрация"""
     if request.method == 'POST':
         first_name = request.form.get('first_name')
         last_name = request.form.get('last_name')
@@ -90,18 +95,44 @@ def user_registration():
         try:
             # создаем соединения и курсор для работы с БД
             conn = get_db()
-            cur = conn.cursor()
+            cur = conn.cursor(dictionary=True)
             
             # 4. Выполняем
             cur.execute(sql_into, vals)
             
-            # сохраняем и закрываем соединения
-            conn.commit()
+            # !!лучше использовать - result = cur.lastrowid!!
+            # каждый пользователь → отдельная трубка
+            # lastrowid лежит внутри трубки
+            # чужие данные туда не попадают
+            # ✔ cur.lastrowid потокобезопасен
+            # ✔ параллельные регистрации не конфликтуют
+            # ✔ чужой id не прилетит
+
+            
+                    
+# # здесь просто ищем подзователя чтобы вернуть ему его id
+# sql_select = """
+# SELECT id from users
+# WHERE (email = %s or phone = %s) and is_deleted = 0;
+# """
+
+# value = (email, phone)
+# cur.execute(sql_select, value)
+
+# res = cur.fetchone()
+        
+            # получить id вставленного пользователя
+            new_user_id = cur.lastrowid
+            
+            # сохраняем изменения
+            conn.commit()           
+            
             cur.close()
             conn.close()
             
-            return f"Вставка прошла успешно"
-        
+            session['user_id'] = new_user_id
+            
+            return redirect(url_for('profile'))
         
         except Error as e:
             return f"Ошибка sql - {e}"
@@ -111,6 +142,7 @@ def user_registration():
 
 @app.route('/login', methods=['GET','POST'])
 def user_login():
+    """для входа в систему"""
     if request.method == 'POST':
         
         login_input = request.form.get('login_input')
@@ -200,8 +232,20 @@ def profile():
         session.pop('user_id', None)
         # как бы мы говорим - удалить! = ничего
         # метод такой - оке, "удали ничего"
+        return redirect(url_for('user_login'))
         
     return render_template('profile.html', user = res)
+
+
+@app.route('/logout', methods=['POST'])
+def logout():
+    """функция для удаления сесии - т.е.: выход"""
+    # удалить все сесии чтобы неболо сюрпризов
+    session.clear()
+    
+    # после удаления сразу перенаправляем в повторный вход
+    return redirect(url_for('user_login'))
+
 
 @app.route('/test', methods=['GET'])
 def get_request():

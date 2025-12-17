@@ -17,4 +17,9 @@
 <br/><br/>
 <span>{{ user['balance'] }}</span>
 <br/><br/>
+{# это кнопка выхода, по своей сути делает изменнеия данных по этому лучше делать это через form чтобы явно указать что это метод POST #}
+{# что для метода POST изменнеия данных характерно #}
+<form action="{{ url_for('logout') }}" method="POST">
+    <button type="submit">выйти</button>
+</form>
 {% endblock main %}
