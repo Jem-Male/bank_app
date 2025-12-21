@@ -16,7 +16,7 @@ def get_all_users():
     conn = None
     try:
         conn = get_conn()
-        with conn.cursor(dictionary=True) as cur:
+        with conn.cursor(dictionary=True) as cur: # with открывает cursor и сам же её закрывает так как использует метод close(), благодаря этому код чуть меньше
             cur.execute('SELECT id, first_name, last_name, card_number, balance FROM users')
             
             return cur.fetchall()
@@ -25,8 +25,8 @@ def get_all_users():
         print("Ошибка - {e}")
         return None
     
-    finally:
-        if conn:
+    finally: # всегда будет закрывать соединения в не зависимости от try, except
+        if conn: # для проверки существоввания самого подключения, не вызовет ошибку так как он проверяет прежде чем закрыть, а то он будет закрывать ничего: none.close()
             conn.close()
 
 
