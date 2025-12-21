@@ -1,9 +1,7 @@
 from flask import Flask, render_template, url_for, request, session, redirect
-import mysql.connector
 from mysql.connector import Error
-import time
 from werkzeug.security import generate_password_hash, check_password_hash # для хеширование паролей
-from config import MYSQL_CONFIG, SECRET_KEY
+from config import SECRET_KEY
 from database import get_all_users, create_user, get_user_by_info, get_user_by_id
 import random
 
