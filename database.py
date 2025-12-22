@@ -83,7 +83,7 @@ def get_user_by_info(email, phone):
             res = cur.fetchone()
             
             return res
-    
+
     except Error as e:
         print(f"Ошибка поиска {e}")
         return None
@@ -111,6 +111,79 @@ def get_user_by_id(user_id):
         print(f"Ошибка поиска {e}")
         return None
     
+    finally:
+        if conn:
+            conn.close()
+
+
+def create_check(send_card, receiver_card, amount):
+    conn = None    
+    try:
+        conn = get_conn()
+        with conn.cursor() as cur:
+            sql_transaction = """
+            INSERT INTO transactions (send_card, receiver_card, amount)
+            VALUES (%s, %s, %s);
+            """
+            cur.execute(sql_transaction,(send_card, receiver_card, amount))
+            cur.fetchone()
+            conn.commit()
+            return True
+    
+    except Error as e:
+        print(f"Ошибка транзакции {e}")
+        return None
+    
+    finally:
+        if conn:
+            conn.close()
+            
+
+def create_transactions(send_card, receiver_card, amount):
+    """Процесс транзакции, отнять и прибавить деньги"""
+    conn = None
+    try:
+        with conn.cursor() as cur:
+            sql_transaction ="""
+            UPDATE users
+            SET balance = balance - %s
+            WHERE users.card_number = '%s'
+            """
+            
+            cur.execute(sql_transaction, (amount, send_card,))
+            cur.fetchone()
+                        
+    except Error as e:
+        pass
+    
+
+def if_user(send_card, receiver_card, amount):
+    conn = None
+    try:
+        with conn.cursor(dictionary=True) as cur:
+            
+            sql_select = """
+            SELECT balance FROM users
+            WHERE card_number = %s and is_delete = 0
+            """
+    
+            cur.execute(sql_select,(receiver_card,))
+            if cur.fetchone() is not None:
+                return f"Получатель не найден"
+            
+            cur.execute(sql_select,(send_card,))
+            
+            send_b = cur.fetchone()
+            
+            if send_b is not None:
+                return f"Отправитель не найден"
+            
+            if send_b > amount:
+                return False
+        
+    except Error as e:
+        print(f"Ошибка функции user_balance - {e}")
+        
     finally:
         if conn:
             conn.close()
