@@ -2,7 +2,7 @@ from flask import Flask, render_template, url_for, request, session, redirect
 from mysql.connector import Error
 from werkzeug.security import generate_password_hash, check_password_hash # для хеширование паролей
 from config import SECRET_KEY
-from database import get_all_users, create_user, get_user_by_info, get_user_by_id
+from database import get_all_users, create_user, get_user_by_info, get_user_by_id, create_transactions
 import random
 
 app = Flask(__name__)
@@ -18,6 +18,7 @@ def index():
 
 @app.route('/users', methods=['GET'])
 def get_users():
+    """Страница со всеми пользователями"""
     data = get_all_users()
     if data == None:
         return f"Данных нет", 500
@@ -139,8 +140,37 @@ def logout():
     return redirect(url_for('user_login'))
 
 
+@app.route('/transaction', methods=['GET','POST'])
+def transaction():
+    """Страница для транзакций"""
+    
+    if request.method == 'POST':
+        user_id = session.get('user_id') or None
+        
+        if user_id:
+            user = get_user_by_id(user_id)
+            receiver_card = request.form.get('receiver_card')
+            amount = request.form.get('amount')
+            
+            t = create_transactions(user['card_number'], receiver_card, amount)
+            
+            return render_template('transaction.html', user = user, t_rse = t)
+        
+        return f'Сессия истекла'
+        
+    # для начало получим id пользователя
+    user_id = session.get('user_id') or None
+    
+    if user_id:
+        user = get_user_by_id(user_id)
+        return render_template('transaction.html', user=user, t_rse = 0)
+        
+    return redirect(url_for('user_login'))
+    
+
 @app.route('/test', methods=['GET'])
 def get_request():
+    """Просто тест"""
     print(request)
     return str(f" {request.base_url}, {request.headers}, {request.method}, {request.args}, {request.get_data()}")
 

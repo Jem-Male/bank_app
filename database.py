@@ -66,6 +66,16 @@ def create_user(values):
 
 
 def get_user_by_info(email, phone):
+    """Поиск пользователя по его email, phone
+    
+    Args:
+        email (str): электронная почта пользователя
+        phone (str): Контактный номер телефона
+        
+    Returns:
+        res (dict) | None: Словарь с данными пользователя, если найден, иначе None.
+    """
+    
     conn = None
     try:
         conn = get_conn()
@@ -94,12 +104,21 @@ def get_user_by_info(email, phone):
 
 
 def get_user_by_id(user_id):
+    """Получение пользователя по его id
+    
+    Args:
+        user_id (str): id пользователя
+        
+    Returns:
+        (dict)
+    """
     conn = None
     try:
         conn = get_conn()
         with conn.cursor(dictionary=True) as cur:
             sql_select = """
-            SELECT id, last_name, middle_name, password, phone, email , card_number, balance from users
+            SELECT id, first_name, last_name, middle_name, password, phone, email , card_number, balance 
+            FROM users
             WHERE id = %s and is_deleted = 0;
             """
             
@@ -117,6 +136,15 @@ def get_user_by_id(user_id):
 
 
 def create_check(send_card, receiver_card, amount):
+    """Создание чека
+    Args:
+        send_card (str)
+        receiver_card (str)
+        amount (float)
+        
+    Returns:
+        result (boolean): True | False
+    """
     conn = None    
     try:
         conn = get_conn()
@@ -131,9 +159,56 @@ def create_check(send_card, receiver_card, amount):
             return True
     
     except Error as e:
-        print(f"Ошибка транзакции {e}")
+        if conn:
+            conn.rollback()
+        print(f"Ошибка функции create_check - {e}")
         return None
     
+    finally:
+        if conn:
+            conn.close()
+   
+
+def if_user(send_card, receiver_card, amount):
+    """Проверка на существование пользователеё и проверка баланса"""
+    conn = None
+    try:
+        conn = get_conn()
+        with conn.cursor(dictionary=True) as cur:
+            
+            sql_select = """
+            SELECT balance FROM users
+            WHERE card_number = %s and is_deleted = 0
+            """
+            
+            cur.execute(sql_select,(receiver_card,))
+
+            # проверка на существование получателя
+            if cur.fetchone() is None:
+                return f"Получатель не найден"
+            
+            cur.execute(sql_select,(send_card,))
+            send_b = cur.fetchone()
+            
+            # проверка на существование отправителя
+            if send_b is None:
+                return f"Отправитель не найден"
+            
+            print(send_b)
+            # проверка - хватит ли денег у отправителя?
+            print(send_b['balance'] > int(amount))
+            if send_b['balance'] < int(amount):
+                return f"Недостаточно средств"
+            
+            # а если все проверки ложны то разрешаем дальнейшие оперции
+            return False
+        
+    except Error as e:
+        if conn:
+            conn.rollback()
+        print(f"Ошибка функции user_balance - {e}")
+        return None
+        
     finally:
         if conn:
             conn.close()
@@ -143,47 +218,54 @@ def create_transactions(send_card, receiver_card, amount):
     """Процесс транзакции, отнять и прибавить деньги"""
     conn = None
     try:
-        with conn.cursor() as cur:
-            sql_transaction ="""
-            UPDATE users
-            SET balance = balance - %s
-            WHERE users.card_number = '%s'
-            """
+        usr = if_user(send_card, receiver_card, amount)
+        # если проверка на пользователей прошла успешно делаем следующие шаги
+        if usr is True:
+            conn = get_conn()
+            with conn.cursor() as cur:
+                # отнимаем у отправителя сумму
+                sql_transaction ="""
+                UPDATE users
+                SET balance = balance - %s
+                WHERE users.card_number = '%s'
+                """
+                cur.execute(sql_transaction, (amount, send_card))
+                cur.fetchone()
+                # прибовляем получателю сумму
+                sql_transaction ="""
+                UPDATE users
+                SET balance = balance + %s
+                WHERE users.card_number = '%s'
+                """
+                cur.execute(sql_transaction, (amount, receiver_card))
+                cur.fetchone()
+                # прежде чем сделать commit мы создаем чек
+                # если чек не создастся отменяем все
+                check = create_check(send_card, receiver_card, amount)
+                if check is True:
+                    conn.commit()
+                    return True
+                conn.rollback()
+                return f"Ошибка тарнзакции"
             
-            cur.execute(sql_transaction, (amount, send_card,))
-            cur.fetchone()
-                        
-    except Error as e:
-        pass
+        return usr
     
-
-def if_user(send_card, receiver_card, amount):
-    conn = None
-    try:
-        with conn.cursor(dictionary=True) as cur:
-            
-            sql_select = """
-            SELECT balance FROM users
-            WHERE card_number = %s and is_delete = 0
-            """
-    
-            cur.execute(sql_select,(receiver_card,))
-            if cur.fetchone() is not None:
-                return f"Получатель не найден"
-            
-            cur.execute(sql_select,(send_card,))
-            
-            send_b = cur.fetchone()
-            
-            if send_b is not None:
-                return f"Отправитель не найден"
-            
-            if send_b > amount:
-                return False
-        
     except Error as e:
-        print(f"Ошибка функции user_balance - {e}")
-        
+        if conn:
+            conn.rollback()
+        print(f"Ошибка функции create_transactions - {e}")
+        return False
+    
     finally:
         if conn:
             conn.close()
+
+"""Бизнес логика в транзакциях:
+ Каждая функция делает свою задачу
+сперва надо создать транзакцию: -CREATE_TRSNSACTIONS
+но в процессе траанзакции мы должны быть уверены в том
+что: существуют ли польщователи и хватит ли у отпрвителя денег? -IF_USER
+дальше мы делаем транзакции, но до того как сохранить транзакции COMMIT
+мы должны создать чек и лишь только потом сделать COMMIT -CREATE_CHECK
+иначе отменяем все
+"""

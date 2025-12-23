@@ -8,7 +8,7 @@
     action="" означает "отправь данные на этот же адрес"
     method="post" означает "спрячь данные внутрь запроса" (не в адресной строке)
 -->
-<form action="/register" method="POST">
+<form action="{{ url_for('user_registration') }}" method="POST">
     <label for="first_name">Фамилия</label>
     <input type="text" name="first_name" required>
     <br/><br/>
