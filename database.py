@@ -135,137 +135,76 @@ def get_user_by_id(user_id):
             conn.close()
 
 
-def create_check(send_card, receiver_card, amount):
-    """Создание чека
-    Args:
-        send_card (str)
-        receiver_card (str)
-        amount (float)
-        
-    Returns:
-        result (boolean): True | False
-    """
-    conn = None    
-    try:
-        conn = get_conn()
-        with conn.cursor() as cur:
-            sql_transaction = """
-            INSERT INTO transactions (send_card, receiver_card, amount)
-            VALUES (%s, %s, %s);
-            """
-            cur.execute(sql_transaction,(send_card, receiver_card, amount))
-            cur.fetchone()
-            conn.commit()
-            return True
-    
-    except Error as e:
-        if conn:
-            conn.rollback()
-        print(f"Ошибка функции create_check - {e}")
-        return None
-    
-    finally:
-        if conn:
-            conn.close()
-   
-
-def if_user(send_card, receiver_card, amount):
-    """Проверка на существование пользователеё и проверка баланса"""
-    conn = None
-    try:
-        conn = get_conn()
-        with conn.cursor(dictionary=True) as cur:
-            
-            sql_select = """
-            SELECT balance FROM users
-            WHERE card_number = %s and is_deleted = 0
-            """
-            
-            cur.execute(sql_select,(receiver_card,))
-
-            # проверка на существование получателя
-            if cur.fetchone() is None:
-                return f"Получатель не найден"
-            
-            cur.execute(sql_select,(send_card,))
-            send_b = cur.fetchone()
-            
-            # проверка на существование отправителя
-            if send_b is None:
-                return f"Отправитель не найден"
-            
-            print(send_b)
-            # проверка - хватит ли денег у отправителя?
-            print(send_b['balance'] > int(amount))
-            if send_b['balance'] < int(amount):
-                return f"Недостаточно средств"
-            
-            # а если все проверки ложны то разрешаем дальнейшие оперции
-            return False
-        
-    except Error as e:
-        if conn:
-            conn.rollback()
-        print(f"Ошибка функции user_balance - {e}")
-        return None
-        
-    finally:
-        if conn:
-            conn.close()
-            
-
 def create_transactions(send_card, receiver_card, amount):
-    """Процесс транзакции, отнять и прибавить деньги"""
+    """Процесс транзакции"""
     conn = None
     try:
-        usr = if_user(send_card, receiver_card, amount)
-        # если проверка на пользователей прошла успешно делаем следующие шаги
-        if usr is True:
-            conn = get_conn()
-            with conn.cursor() as cur:
-                # отнимаем у отправителя сумму
-                sql_transaction ="""
-                UPDATE users
-                SET balance = balance - %s
-                WHERE users.card_number = '%s'
-                """
-                cur.execute(sql_transaction, (amount, send_card))
-                cur.fetchone()
-                # прибовляем получателю сумму
-                sql_transaction ="""
-                UPDATE users
-                SET balance = balance + %s
-                WHERE users.card_number = '%s'
-                """
-                cur.execute(sql_transaction, (amount, receiver_card))
-                cur.fetchone()
-                # прежде чем сделать commit мы создаем чек
-                # если чек не создастся отменяем все
-                check = create_check(send_card, receiver_card, amount)
-                if check is True:
-                    conn.commit()
-                    return True
-                conn.rollback()
-                return f"Ошибка тарнзакции"
-            
-        return usr
+        # валидация суммы
+        # это важно либо же sql введет данные не верно
+        try:
+            # Эта строка пытается преобразовать (привести тип) того, что ввел пользователь, в число с плавающей точкой.
+            # Если ввели "100" — превратит в 100.0.
+            # Если ввели "100.50" — превратит в 100.5.
+            # Если ввели "привет" — выбросит ошибку ValueError.
+            # Именно поэтому ты оборачиваешь это в try...except
+            amount = float(amount)
+            # данные из HTML-формы всегда приходят в виде строк (str). 
+            # Ты не можешь просто так вычесть строку из баланса в базе данных. 
+            # Тебе в любом случае нужно превратить текст в число.
+            if amount < 0:
+                return "Сумма должна быть больше нуля"
+
+        except ValueError:
+            return f"Некоректная сумма"
+        
+        conn = get_conn()
+        cur = conn.cursor(dictionary=True)
+        
+        cur.execute("SELECT id FROM users WHERE card_number = %s", (receiver_card,))
+        
+        if cur.fetchone() is None:
+            return f"Получатель не найден"
+
+        cur.execute("SELECT balance FROM users WHERE card_number = %s", (send_card,))
+        sender = cur.fetchone()
+        
+        if sender is None:
+            return f"Получатель не найден"
+        
+        if sender['balance'] < amount:
+            return "Недостаточно средств"
+
+        # отнимаем у отправителя сумму
+        sql_transaction ="""
+        UPDATE users
+        SET balance = balance - %s
+        WHERE users.card_number = %s
+        """
+        cur.execute(sql_transaction, (amount, send_card))
+        # прибовляем получателю сумму
+        sql_transaction ="""
+        UPDATE users
+        SET balance = balance + %s
+        WHERE users.card_number = %s
+        """
+        cur.execute(sql_transaction, (amount, receiver_card))
+        # прежде чем сделать commit мы создаем чек
+        # если чек не создастся отменяем все
+        sql_transaction = """
+        INSERT INTO transactions (send_card, receiver_card, amount)
+        VALUES (%s, %s, %s);
+        """
+        cur.execute(sql_transaction,(send_card, receiver_card, amount))
+        cur.fetchone()
+        conn.commit()
+        return True
     
     except Error as e:
-        if conn:
-            conn.rollback()
-        print(f"Ошибка функции create_transactions - {e}")
+        print(f"ошибка создания транзакции - {e}")
         return False
     
     finally:
+        if cur:
+            cur.close()
         if conn:
             conn.close()
-
-"""Бизнес логика в транзакциях:
- Каждая функция делает свою задачу
-сперва надо создать транзакцию: -CREATE_TRSNSACTIONS
-но в процессе траанзакции мы должны быть уверены в том
-что: существуют ли польщователи и хватит ли у отпрвителя денег? -IF_USER
-дальше мы делаем транзакции, но до того как сохранить транзакции COMMIT
-мы должны создать чек и лишь только потом сделать COMMIT -CREATE_CHECK
-иначе отменяем все
-"""

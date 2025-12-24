@@ -1,21 +1,27 @@
 {% extends "base.html" %}
 {% block main %}
-<h3>Вы: {{ user['first_name'], user['last_name'] }}</h3>
-<span>ваш баланс: {{ user['balance'] }}</span>
-<br>
-<form action="{{ url_for('transaction') }}" method="POST">
-    <label for="receiver_card">Введите карту получателя</label>
-    <input type="text" name="receiver_card">
+    <h3>Вы: {{ user['first_name'], user['last_name'] }}</h3>
+    <span>ваш баланс: {{ user['balance'] }}</span>
+    <br>
+    <form action="{{ url_for('transaction') }}" method="POST">
+        <label for="receiver_card">Введите карту получателя</label>
+        <input type="text" name="receiver_card">
+        <br><br>
+        <label for="amount">сумма</label>
+        <input type="text" name="amount">
+        <br><br>
+        <button type="submit">Отправить</button>
+    </form>
     <br><br>
-    <label for="amount">сумма</label>
-    <input type="text" name="amount">
-    <br><br>
-    <button type="submit">Отправить</button>
-</form>
-<br><br>
-{% if t_rse is true %}
-<h3 style="color: rgb(53, 255, 53);">Транзакция прошла успешно</h3>
-{% elif t_rse %}
-<h3 style="color: red;">Ошибка: {{t_rse}}</h3>
-{% endif %}
+    {% if message %}
+        {% if success %}
+            <div style="background-color: #d4edda; color: #155724; padding: 10px; border-radius: 5px;">
+                ✅ {{ message }}
+            </div>
+        {% else %}
+            <div style="background-color: #f8d7da; color: #721c24; padding: 10px; border-radius: 5px;">
+                ❌ Ошибка: {{ message }}
+            </div>
+        {% endif %}
+    {% endif %}
 {% endblock main %}

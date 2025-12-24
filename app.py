@@ -144,6 +144,9 @@ def logout():
 def transaction():
     """Страница для транзакций"""
     
+    msg = None
+    is_success = False
+    
     if request.method == 'POST':
         user_id = session.get('user_id') or None
         
@@ -152,18 +155,26 @@ def transaction():
             receiver_card = request.form.get('receiver_card')
             amount = request.form.get('amount')
             
-            t = create_transactions(user['card_number'], receiver_card, amount)
+            result = create_transactions(user['card_number'], receiver_card, amount)
             
-            return render_template('transaction.html', user = user, t_rse = t)
+            if result is True:
+                msg = "Перевод прошел успешно"
+                is_success = True
+            else:
+                msg = result
+                is_success = False
+            
+            return render_template('transaction.html', user = user, message=msg, success=is_success)
         
         return f'Сессия истекла'
-        
+    
     # для начало получим id пользователя
     user_id = session.get('user_id') or None
     
+    
     if user_id:
         user = get_user_by_id(user_id)
-        return render_template('transaction.html', user=user, t_rse = 0)
+        return render_template('transaction.html', user=user, message=msg, success=is_success)
         
     return redirect(url_for('user_login'))
     
