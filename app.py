@@ -1,190 +1,132 @@
-from flask import Flask, render_template, url_for, request, session, redirect
-from mysql.connector import Error
-from werkzeug.security import generate_password_hash, check_password_hash # для хеширование паролей
-from config import SECRET_KEY
-from database import get_all_users, create_user, get_user_by_info, get_user_by_id, create_transactions
+# app.py
+from flask import Flask, render_template, request, redirect, url_for, session
+from werkzeug.security import generate_password_hash, check_password_hash
+from sqlalchemy import or_ # Нужно для условия "ИЛИ"
 import random
 
+# Наши новые файлы
+from config import SQLALCHEMY_DATABASE_URI, SECRET_KEY
+from models import db, User
+
 app = Flask(__name__)
-# для сесии
-app.secret_key = SECRET_KEY
 
+# --- Настройка ---
+app.config['SQLALCHEMY_DATABASE_URI'] = SQLALCHEMY_DATABASE_URI
+app.config['SECRET_KEY'] = SECRET_KEY
 
-@app.route('/', methods=['GET'])
+# Инициализация БД
+db.init_app(app)
+
+# Создание таблиц при запуске
+with app.app_context():
+    db.create_all() 
+    # SQLAlchemy посмотрит на models.py и создаст таблицу users в MySQL, если её нет.
+    print("БД подключена и таблицы проверены.")
+
+# --- Маршруты ---
+
+@app.route('/')
 def index():
-    """главная страница"""
     return render_template('index.html', title='Главная - Банк')
 
-
-@app.route('/users', methods=['GET'])
+@app.route('/users')
 def get_users():
-    """Страница со всеми пользователями"""
-    data = get_all_users()
-    if data == None:
-        return f"Данных нет", 500
-    return render_template('users.html', users=data, title='Пользователи')
+    # СТАРЫЙ КОД: cursor.execute('SELECT * FROM users')
+    # НОВЫЙ КОД:
+    users_list = User.query.all() 
+    return render_template('users.html', users=users_list, title='Пользователи')
 
-
-@app.route('/register', methods=['GET','POST'])
+@app.route('/register', methods=['GET', 'POST'])
 def user_registration():
-    """для создания нового пользоватеья + регистрация"""
     if request.method == 'POST':
-        first_name = request.form.get('first_name')
-        last_name = request.form.get('last_name')
-        middle_name = request.form.get('middle_name')
-        password = request.form.get('password')
-        email = request.form.get('email')
+        # Сбор данных из формы
+        fname = request.form.get('first_name')
+        lname = request.form.get('last_name')
+        mname = request.form.get('middle_name')
         phone = request.form.get('phone')
-        
-        # 1. Получаем Email
-        # Если поле пустое, .get() вернет пустую строку ''. 
-        # Конструкция (A or B) вернет B, если A пустое.
-        # То есть email станет None, если пользователь ничего не ввел.
-        email = request.form.get('email') or None
-        
-        # логируем регистрированного пользователя в ком.строку
-        print(f"новые данные: {first_name}, {phone}")
-        
-        # 3. Собираем значения
-        # Если в переменной email лежит None, в базу запишется NULL.
-        # Если там "mail@mail.ru", запишется строка.
-        # Генерацию карты тоже лучше вынести в переменную для читаемости.
-        hashed_password = generate_password_hash(password)
-        card_num = str(random.randint(100000000000, 999999999999))
-        
-        # создаем значения для values
-        vals = (first_name, last_name, middle_name, hashed_password, phone, email, card_num)
+        email = request.form.get('email') or None # Пустая строка превращается в None
+        raw_password = request.form.get('password')
+
+        # Проверка: есть ли такой пользователь?
+        # SELECT * FROM users WHERE phone = ... OR email = ...
+        existing_user = User.query.filter(
+            or_(User.phone == phone, User.email == email)
+        ).first()
+
+        if existing_user:
+            return "Пользователь с таким телефоном или почтой уже есть!"
+
+        # Генерация данных
+        hashed_pw = generate_password_hash(raw_password)
+        card_num = str(random.randint(1000000000000000, 9999999999999999)) # 16 цифр
+
+        # Создание объекта (НОВАЯ МАГИЯ ✨)
+        new_user = User(
+            first_name=fname,
+            last_name=lname,
+            middle_name=mname,
+            phone=phone,
+            email=email,
+            password=hashed_pw,
+            card_number=card_num,
+            balance=0 # Начальный баланс
+        )
+
         try:
+            db.session.add(new_user) # "Добавь в список задач"
+            db.session.commit()      # "Выполни SQL запрос INSERT"
             
-            new_user_id = create_user(vals)
-            if new_user_id is False:
-                return f"Ошибка такой пользовател существует"
-            
-            session['user_id'] = new_user_id
-            
+            # Авто-логин
+            session['user_id'] = new_user.id
             return redirect(url_for('profile'))
-        
-        except Error as e:
             
-            return f"Ошибка sql - {e}"
-        
+        except Exception as e:
+            db.session.rollback() # Если ошибка - отменяем
+            return f"Ошибка регистрации: {e}"
+
     return render_template('register.html', title='Регистрация')
 
-
-@app.route('/login', methods=['GET','POST'])
+@app.route('/login', methods=['GET', 'POST'])
 def user_login():
-    """для входа в систему"""
+    msg = None
     if request.method == 'POST':
-        
         login_input = request.form.get('login_input')
         password = request.form.get('password')
-        
-        res = get_user_by_info(login_input, login_input)
-        
-        if res is None:
-            invalid = 'Такого пользователя нет'
-            
-        # check_password_hash() - медот для проверки пароля
-        # сперва хэш потом то что ввел пользователь
-        elif check_password_hash(res['password'], password):                
-            
-            # тут создается session по его id
-            session['user_id'] = res['id'] 
-            return redirect(url_for('profile'))
-            
-        else:
-            invalid = 'Неверный пароль'
-            
-        return render_template('login.html', invalid = invalid)
-         
-    return render_template('login.html', invalid = 0)
 
+        # Поиск пользователя (Email ИЛИ Phone)
+        # SELECT * FROM users WHERE (email=input OR phone=input) AND is_deleted=False
+        user = User.query.filter(
+            or_(User.email == login_input, User.phone == login_input),
+            User.is_deleted == False
+        ).first()
+
+        if user and check_password_hash(user.password, password):
+            session['user_id'] = user.id
+            return redirect(url_for('profile'))
+        else:
+            msg = "Неверный логин или пароль"
+
+    return render_template('login.html', invalid=msg)
 
 @app.route('/me')
 def profile():
-    """Страница профиля"""
-    
-    # здесь мы пробуем получить сессию от пользователя
-    # а именно пытаемся получить его id чтобы найти его в БД
-    user_id = session.get('user_id') or None
-    
-    # если сессии нет опять перенаправляем его на страницу входа
-    if user_id is None:
+    user_id = session.get('user_id')
+    if not user_id:
         return redirect(url_for('user_login'))
-    
-    res = get_user_by_id(user_id)
-   
-    # если такого пользователя нет или же он уже удален - (is_deleted = 1, True)
-    # то мы удаляем его протухшие куки
-    # ведь уже тут он смог пройти проверку на наличия session
-    if res is None:
-        
-        # удаляем через метод pop() 
-        # но если все же у метода не получится найти user_id session то просто возвращает None
-        # то етсь мягкое удаление
-        session.pop('user_id', None)
-        # как бы мы говорим - удалить! = ничего
-        # метод такой - оке, "удали ничего"
-        return redirect(url_for('user_login'))
-        
-    return render_template('profile.html', user = res)
 
+    # Получение пользователя по ID (новый синтаксис SQLAlchemy 2.0)
+    user = db.session.get(User, user_id)
+
+    if not user:
+        session.clear()
+        return redirect(url_for('user_login'))
+
+    return render_template('profile.html', user=user)
 
 @app.route('/logout', methods=['POST'])
 def logout():
-    """функция для удаления сесии - т.е.: выход"""
-    # удалить все сесии чтобы неболо сюрпризов
     session.clear()
-    
-    # после удаления сразу перенаправляем в повторный вход
     return redirect(url_for('user_login'))
 
-
-@app.route('/transaction', methods=['GET','POST'])
-def transaction():
-    """Страница для транзакций"""
-    
-    msg = None
-    is_success = False
-    
-    if request.method == 'POST':
-        user_id = session.get('user_id') or None
-        
-        if user_id:
-            user = get_user_by_id(user_id)
-            receiver_card = request.form.get('receiver_card')
-            amount = request.form.get('amount')
-            
-            result = create_transactions(user['card_number'], receiver_card, amount)
-            
-            if result is True:
-                msg = "Перевод прошел успешно"
-                is_success = True
-            else:
-                msg = result
-                is_success = False
-            
-            return render_template('transaction.html', user = user, message=msg, success=is_success)
-        
-        return f'Сессия истекла'
-    
-    # для начало получим id пользователя
-    user_id = session.get('user_id') or None
-    
-    
-    if user_id:
-        user = get_user_by_id(user_id)
-        return render_template('transaction.html', user=user, message=msg, success=is_success)
-        
-    return redirect(url_for('user_login'))
-    
-
-@app.route('/test', methods=['GET'])
-def get_request():
-    """Просто тест"""
-    print(request)
-    return str(f" {request.base_url}, {request.headers}, {request.method}, {request.args}, {request.get_data()}")
-
-
-if '__main__' == __name__:
-    app.run(debug=True, host='0.0.0.0', port=5000)
+if __name__ == '__main__':
+    app.run(debug=True)
