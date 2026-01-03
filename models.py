@@ -30,6 +30,7 @@ class User(db.Model):
     # balance = db.Column(db.Numeric(precision=10, scale=2), default='0.00', nullable=False)
     # да default='0.00' но при создании он станет обычным числом
     balance = db.Column(db.Numeric(10, 2), default=0, nullable = False)
+    # created_ad = db.Column(db.DateTime, server_default = db.func.now())
     is_deleted = db.Column(db.Boolean(), default = False, nullable = False)
     
     # Метод __repr__ нужен просто для красивого вывода в print()
@@ -37,3 +38,47 @@ class User(db.Model):
     def __repr__(self):
         return f'<Created new user: id-{self.id}, name-{self.first_name} {self.last_name}, card-{self.card_number[-4:]}>'
     
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "first_name": self.first_name,
+            "last_name": self.last_name,
+            "middle_name": self.middle_name,
+            "phone": self.phone,
+            "email": self.email,
+            "password": self.password,
+            "card_number": self.card_number,
+            "role": self.role,
+            "status": self.status,
+            "balance": self.balance,
+            "is_deleted": self.is_deleted
+        }
+        
+class Transaction(db.Model):
+    
+    __tablename__ = 'transactions'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    send_card = db.Column(db.String(16), db.ForeignKey('users.card_number'), nullable = False)
+    receiver_card = db.Column(db.String(16), db.ForeignKey('users.card_number'), nullable = False)
+    amount = db.Column(db.Numeric(10,2), nullable = False)
+    status = db.Column(db.String(20), default = 'success')
+
+    # created_at = db.Column(db.DateTime, default = datetime.utcnow()) - нет
+    # это устаревший метод создания времени, причем не точный
+    # лучше будет если БД само создаёт время
+    # server_default (Дефолт на стороне Базы Данных)
+    # db.func.now() - это инструкция для базы данных, а не готовое значение в Python
+    created_ad = db.Column(db.DateTime, server_default = db.func.now())
+    
+    def __repr__(self):
+        return f"new transaction create: id: {self.id}, status: {self.status}"
+    
+    def get_dict(self):
+        return {
+            "id": self.id,
+            "sender": self.send_card,
+            "receiver": self.receiver_card,
+            "amount": float(self.amount),
+            "create_at": self.created_ad.strftime('%Y-%m-%d %H:%M')
+        }

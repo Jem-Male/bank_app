@@ -4,8 +4,8 @@
     <span>ваш баланс: {{ user['balance'] }}</span>
     <br>
     <form action="{{ url_for('transaction') }}" method="POST">
-        <label for="receiver_card">Введите карту получателя</label>
-        <input type="text" name="receiver_card">
+        <label for="r_card">Введите карту получателя</label>
+        <input type="text" name="r_card">
         <br><br>
         <label for="amount">сумма</label>
         <input type="text" name="amount">
