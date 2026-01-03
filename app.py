@@ -1,34 +1,27 @@
-# app.py
 from flask import Flask, render_template, request, redirect, url_for, session
 from werkzeug.security import generate_password_hash, check_password_hash
 from sqlalchemy import or_ # Нужно для условия "ИЛИ"
 import random
 from decimal import Decimal
-
-# Наши новые файлы
 from config import SQLALCHEMY_DATABASE_URI, SECRET_KEY
 from models import db, User, Transaction
 
 app = Flask(__name__)
 
-# --- Настройка ---
 app.config['SQLALCHEMY_DATABASE_URI'] = SQLALCHEMY_DATABASE_URI
 app.config['SECRET_KEY'] = SECRET_KEY
 
-# Инициализация БД
 db.init_app(app)
 
-# Создание таблиц при запуске
 with app.app_context():
     db.create_all() 
-    # SQLAlchemy посмотрит на models.py и создаст таблицу users в MySQL, если её нет.
     print("БД подключена и таблицы проверены.")
 
-# --- Маршруты ---
 
 @app.route('/')
 def index():
     return render_template('index.html', title='Главная - Банк')
+
 
 @app.route('/users')
 def get_users():
@@ -36,6 +29,7 @@ def get_users():
     # НОВЫЙ КОД:
     users_list = User.query.all() 
     return render_template('users.html', users=users_list, title='Пользователи')
+
 
 @app.route('/register', methods=['GET', 'POST'])
 def user_registration():
@@ -87,6 +81,7 @@ def user_registration():
 
     return render_template('register.html', title='Регистрация')
 
+
 @app.route('/login', methods=['GET', 'POST'])
 def user_login():
     msg = None
@@ -108,6 +103,7 @@ def user_login():
             msg = "Неверный логин или пароль"
 
     return render_template('login.html', invalid=msg)
+
 
 @app.route('/me')
 def profile():
@@ -145,8 +141,11 @@ def transaction():
             msg = "средства нельзя отправлять самому себе"
         else:
             try:
-                if Decimal(amount) <=0:
+                amount = Decimal(amount)
+                if amount <=0:
                     msg = "отправляемая сумма не может быть отрицательной"
+                elif amount > send_user.balance:
+                    msg = "недостаточоно средств"
             except:
                 msg = "Ошибка ввода"
                 return render_template('transaction.html', user=send_user, message = msg, success = succ)
@@ -158,7 +157,7 @@ def transaction():
                 new_transaction = Transaction(
                     send_card = send_user.card_number,
                     receiver_card = revecide_user.card_number,
-                    amount = Decimal(amount)
+                    amount = amount
                 )
                 db.session.add(new_transaction)
                 db.session.commit()
@@ -175,6 +174,18 @@ def transaction():
           
     return redirect(url_for('user_login'))
 
+
+@app.route('/history', methods=['GET'])
+def history():
+    user_id = session.get('user_id') or None
+    if user_id:
+        user = db.session.get(User, user_id)
+        transactions = Transaction.query.filter_by(send_card=user.card_number).all()
+        return render_template('history_tr.html', transaction = transactions)
+    
+    return redirect(url_for('user_login'))
+
+    
 @app.route('/logout', methods=['POST'])
 def logout():
     session.clear()

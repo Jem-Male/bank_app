@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block main %}
+    <h1>История:</h1>
+    <br/>
+    {% if transaction %}
+        {% for tr in transaction %}
+            <div style="border: 1px solid black;">
+                <br>
+                <span>Получатель: {{tr.receiver_card}}</span>
+                <br>
+                <span>Сумма: {{tr.amount}}</span>
+                <br>
+                <span>Время: {{tr.created_ad}}</span>
+                <br>
+                <br>
+            </div>
+        {% endfor %}
+    {% else %}
+        <h2>У вас нет истории<h2/>
+    {% endif %}
+{% endblock main %}
