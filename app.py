@@ -137,30 +137,36 @@ def transaction():
         send_user = db.session.get(User, user_id)
         r_user = request.form.get('r_card')
         revecide_user = User.query.filter_by(card_number = r_user).first()
-        amount = Decimal(request.form.get('amount'))
+        amount = request.form.get('amount')
         
         if not revecide_user:
             msg = "получатель не найден"
-        elif amount < 0:
-            msg = "отправляемая сумма не может быть отрицательной"
-        elif send_user.balance < amount:
-            msg = "недостаточно средств для выполнения запроса"
         elif r_user == send_user.card_number:
             msg = "средства нельзя отправлять самому себе"
         else:
-
-            send_user.balance -= amount
-            revecide_user.balance += amount
+            try:
+                if Decimal(amount) <=0:
+                    msg = "отправляемая сумма не может быть отрицательной"
+            except:
+                msg = "Ошибка ввода"
+                return render_template('transaction.html', user=send_user, message = msg, success = succ)
             
-            new_transaction = Transaction(
-                send_card = send_user.card_number,
-                receiver_card = revecide_user.card_number,
-                amount = amount
-            )
-            db.session.add(new_transaction)
-            db.session.commit()
-            msg = "Средства былы успешно переведены"
-            succ = True
+            try:
+                send_user.balance -= amount
+                revecide_user.balance += amount
+                
+                new_transaction = Transaction(
+                    send_card = send_user.card_number,
+                    receiver_card = revecide_user.card_number,
+                    amount = Decimal(amount)
+                )
+                db.session.add(new_transaction)
+                db.session.commit()
+                msg = "Средства былы успешно переведены"
+                succ = True
+            except:
+                db.session.rollback()
+                msg = "Ошибка перевода"                
         return render_template('transaction.html', user=send_user, message = msg, success = succ)
     
     if user_id:
