@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block main %}
+    <br>
+    <h1 style="color: red;">отмена перевода</h1>
+    <br><br>
+    {% if tr %}
+        <p>индекс певода: {{ tr.id }}</p>
+        <p>Отправитель(вы): {{ us.first_name}}, {{us.last_name }} </p>
+        <p>Карта отправителя(вы): {{ tr.send_card }} </p>
+        <p>Получатель: {{ tr.receiver_card }} </p>
+        <p>Время: {{ tr.created_ad }}</p>
+        <br>
+        <form action="{{url_for('cancellation', tr_id = tr.id)}}" method="POST">
+            <label for="pass">Введите свой пароль</label>
+            <br><br>
+            <input type="password" name="pass" placeholder="пароль" required>
+            <br><br>
+            <button type="submit" style="color: red; padding: 10px;">Отменить перевод</button>
+        </form>
+    {% endif %}
+    {% if msg %}
+        <h4 style = "color:red;">{{ msg }}</h4>
+    {% elif res %}
+        <h3 style="color: green;">{{res}}</h3>
+    {% endif %}
+{% endblock main %}

@@ -13,6 +13,7 @@
                 <span>Время: {{tr.created_ad}}</span>
                 <br>
                 <br>
+                <a href="{{url_for('cancellation', tr_id = tr.id)}}" style="text-decoration: none; color: red; margin: 10px">отменить перевод</a>
             </div>
         {% endfor %}
     {% else %}

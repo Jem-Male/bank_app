@@ -144,8 +144,10 @@ def transaction():
                 amount = Decimal(amount)
                 if amount <=0:
                     msg = "отправляемая сумма не может быть отрицательной"
+                    return render_template('transaction.html', user=send_user, message = msg, success = succ)
                 elif amount > send_user.balance:
                     msg = "недостаточоно средств"
+                    return render_template('transaction.html', user=send_user, message = msg, success = succ)
             except:
                 msg = "Ошибка ввода"
                 return render_template('transaction.html', user=send_user, message = msg, success = succ)
@@ -180,12 +182,46 @@ def history():
     user_id = session.get('user_id') or None
     if user_id:
         user = db.session.get(User, user_id)
-        transactions = Transaction.query.filter_by(send_card=user.card_number).all()
+        transactions = Transaction.query.filter_by(send_card=user.card_number, status='success').all()
         return render_template('history_tr.html', transaction = transactions)
     
     return redirect(url_for('user_login'))
 
-    
+
+@app.route('/cancellation/<int:tr_id>', methods=['GET', 'POST'])
+def cancellation(tr_id):
+    msg = None
+    if request.method == 'POST':
+        transaction = db.session.get(Transaction, tr_id)
+        password = request.form.get('pass')
+        send_user = User.query.filter_by(card_number = transaction.send_card).first()
+        revecide_user = User.query.filter_by(card_number = transaction.receiver_card).first()
+        amount = transaction.amount
+        if check_password_hash(send_user.password, password):
+            try:
+                send_user.balance += amount
+                revecide_user.balance -= amount
+                
+                transaction.status = "Refund"
+                
+                db.session.commit()
+                res = "Отмена прошла успешно"
+                tr = None
+            except:
+                db.session.rollback()
+                res = "Отмена"
+                msg = "Ошибка перевода"
+            return render_template('cancellation.html', tr = tr, res = res)
+        else:
+            msg = "Ошибка пароля"
+    tr = db.session.get(Transaction, tr_id)
+    user = db.session.get(User, session.get('user_id'))
+    if (user and tr) is None:
+        tr = None
+        msg = "Ошибка"
+        user = None
+    return render_template('cancellation.html', tr = tr, res = False, msg = msg, us = user)
+
 @app.route('/logout', methods=['POST'])
 def logout():
     session.clear()
