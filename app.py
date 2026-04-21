@@ -1,10 +1,11 @@
 from flask import Flask, render_template, request, redirect, url_for, session
 from werkzeug.security import generate_password_hash, check_password_hash
-from sqlalchemy import or_ # Нужно для условия "ИЛИ"
+from sqlalchemy import select, or_ # Нужно для условия "ИЛИ"
 import random
 from decimal import Decimal
 from config import SQLALCHEMY_DATABASE_URI, SECRET_KEY
 from models import db, User, Transaction
+from auth_utils import login_required
 
 app = Flask(__name__)
 
@@ -99,6 +100,8 @@ def user_login():
         if user and check_password_hash(user.password, password):
             session['user_id'] = user.id
             return redirect(url_for('profile'))
+        elif user:
+            msg = "Неверный пароль"
         else:
             msg = "Неверный логин или пароль"
 
@@ -106,14 +109,12 @@ def user_login():
 
 
 @app.route('/me')
+@login_required
 def profile():
     user_id = session.get('user_id')
-    if not user_id:
-        return redirect(url_for('user_login'))
-
-    # Получение пользователя по ID (новый синтаксис SQLAlchemy 2.0)
     user = db.session.get(User, user_id)
 
+   # если пользователю больше не существует
     if not user:
         session.clear()
         return redirect(url_for('user_login'))
@@ -122,6 +123,7 @@ def profile():
 
 
 @app.route('/transaction', methods=['GET','POST'])
+@login_required
 def transaction():
     
     msg = None
@@ -168,59 +170,98 @@ def transaction():
             except:
                 db.session.rollback()
                 msg = "Ошибка перевода"                
+    
         return render_template('transaction.html', user=send_user, message = msg, success = succ)
     
-    if user_id:
-        user = db.session.get(User, user_id)
-        return render_template('transaction.html', user=user, message = msg, success = succ)  
-          
-    return redirect(url_for('user_login'))
-
+    
+    user = db.session.get(User, user_id)
+    return render_template('transaction.html', user=user, message = msg, success = succ)  
+    
 
 @app.route('/history', methods=['GET'])
+@login_required
 def history():
-    user_id = session.get('user_id') or None
-    if user_id:
-        user = db.session.get(User, user_id)
-        transactions = Transaction.query.filter_by(send_card=user.card_number, status='success').all()
-        return render_template('history_tr.html', transaction = transactions)
+    user_id = session.get('user_id')
+    user = db.session.get(User, user_id)
+    # сделай так чтобы бэкенд получал все данные, а jinja2 сама 
+    # все рассартирует по типам транзакции: отправленные, полученное, отмененые
+    # transaction = select(Transaction).where(or_(Transaction.receiver_card==user.card_number, Transaction.send_card==user.card_number))
+    # pushTransactions = Transaction.query.filter_by(send_card=user.card_number, status='success').all()
+    # pullTransactions = Transaction.query.filter_by(receiver_card=user.card_number, status='success').all()
     
-    return redirect(url_for('user_login'))
+    transaction = db.session.scalars(select(Transaction).where(
+        or_(
+            Transaction.receiver_card==user.card_number, 
+            Transaction.send_card==user.card_number
+            )
+        )).all() # новая запись
+
+    return render_template('history_tr.html', transaction = transaction, user = user, arr = None) # переделай страницу под новое 
+    
+    # добавь чтобы было видно поступления
+    # pullTransactions - то что получено
+    # pushtransactions - то что отправленно
+    # либо сделай чуть лучше: проверяй 
+    # {% if tr.sender_card == user.card_number %}
+    #     <h3 style="color: red;">- {{ tr.amount }} (Исходящий)</h3>
+    #     <span>Кому: {{ tr.receiver_card }}</span>
+    #     <br>
+    #     <!-- Кнопку отмены показываем ТОЛЬКО для исходящих -->
+    #     <a href="{{url_for('cancellation', tr_id=tr.id)}}" style="color: grey;">Отменить перевод</a>
+
+    # <!-- Иначе (если получатель Я) -->
+    # {% else %}
+    #     <h3 style="color: green;">+ {{ tr.amount }} (Входящий)</h3>
+    #     <span>От кого: {{ tr.sender_card }}</span>
+    # {% endif %}
+    
 
 
 @app.route('/cancellation/<int:tr_id>', methods=['GET', 'POST'])
+@login_required
 def cancellation(tr_id):
     msg = None
-    if request.method == 'POST':
-        transaction = db.session.get(Transaction, tr_id)
+    transaction = Transaction.query.filter_by(id = tr_id, status = "success").first()
+    user = db.session.get(User, session.get('user_id'))
+    if not user or not transaction:
+        transaction = None
+        msg = "Ошибка"
+        user = None
+    elif user.card_number != transaction.send_card:
+        transaction = None
+        user = None
+        msg = "Ошибка: доступ запрещен" 
+    elif request.method == 'POST':
         password = request.form.get('pass')
-        send_user = User.query.filter_by(card_number = transaction.send_card).first()
-        revecide_user = User.query.filter_by(card_number = transaction.receiver_card).first()
         amount = transaction.amount
-        if check_password_hash(send_user.password, password):
+        revecide_user = User.query.filter(User.card_number == transaction.receiver_card, User.balance > amount).first()
+        if not revecide_user:
+            res = False
+            msg = "Отмена невозможна: средства уже использованы получателем или заблокированы"
+            user = None
+            transaction = None
+        elif check_password_hash(user.password, password):
             try:
-                send_user.balance += amount
+                user.balance += amount
                 revecide_user.balance -= amount
                 
                 transaction.status = "Refund"
                 
                 db.session.commit()
                 res = "Отмена прошла успешно"
-                tr = None
+                user = None
+                transaction = None
             except:
                 db.session.rollback()
-                res = "Отмена"
+                res = False
                 msg = "Ошибка перевода"
-            return render_template('cancellation.html', tr = tr, res = res)
+                user = None
+                transaction = None
+            return render_template('cancellation.html', tr = transaction, res = res, msg = msg, us = user)
         else:
             msg = "Ошибка пароля"
-    tr = db.session.get(Transaction, tr_id)
-    user = db.session.get(User, session.get('user_id'))
-    if (user and tr) is None:
-        tr = None
-        msg = "Ошибка"
-        user = None
-    return render_template('cancellation.html', tr = tr, res = False, msg = msg, us = user)
+            
+    return render_template('cancellation.html', tr = transaction, res = False, msg = msg, us = user)
 
 @app.route('/logout', methods=['POST'])
 def logout():
@@ -228,4 +269,4 @@ def logout():
     return redirect(url_for('user_login'))
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(debug=True, host='0.0.0.0')

@@ -21,3 +21,27 @@ header a {
     color: #fff;
     margin-left: 10px;
 }
+
+.his_lin{
+    display: grid;
+}
+
+.his{
+    width: auto;
+    border: 1px solid black;
+    border-radius: 20px;
+    padding: 15px;
+    margin-bottom: 10px;
+    text-decoration: none;
+    color: rgb(0, 0, 0);
+    display: flex;
+    justify-content: space-between;
+}
+
+.his_img{
+    display: flex;
+}
+
+.his_dis{
+    margin-left: 5px;
+}

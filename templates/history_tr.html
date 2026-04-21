@@ -1,22 +1,55 @@
 {% extends "base.html" %}
 {% block main %}
-    <h1>История:</h1>
-    <br/>
+    <h1 class="mb-4">История операций</h1>
+    
     {% if transaction %}
-        {% for tr in transaction %}
-            <div style="border: 1px solid black;">
-                <br>
-                <span>Получатель: {{tr.receiver_card}}</span>
-                <br>
-                <span>Сумма: {{tr.amount}}</span>
-                <br>
-                <span>Время: {{tr.created_ad}}</span>
-                <br>
-                <br>
-                <a href="{{url_for('cancellation', tr_id = tr.id)}}" style="text-decoration: none; color: red; margin: 10px">отменить перевод</a>
-            </div>
-        {% endfor %}
+        <div class="row"> <!-- Создаем сетку -->
+            {% for tr in transaction %}
+                <div class="col-md-6 mb-3"> <!-- Карточка будет занимать половину экрана на ПК -->
+                    <div class="card shadow-sm h-100"> <!-- card - белая карточка, shadow-sm - красивая тень -->
+                        <div class="card-body">
+                            
+                            <!-- Шапка карточки с картинкой и статусом -->
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                {% if tr.send_card == user.card_number %}
+                                    {% set arr = 'up_arr.svg' %}
+                                    <h5 class="text-danger mb-0">- {{tr.amount}} ₽</h5> <!-- Красный текст -->
+                                {% else %}
+                                    {% set arr = 'down_arr.svg' %}
+                                    <h5 class="text-success mb-0">+ {{tr.amount}} ₽</h5> <!-- Зеленый текст -->
+                                {% endif %}
+                                
+                                {% if tr.status != 'success' %}
+                                    {% set arr = 'x.svg' %}
+                                    <span class="badge bg-secondary">Отменен</span> <!-- Серая плашка статуса -->
+                                {% endif %}
+                                
+                                <img src="{{ url_for('static', filename='img/' ~arr) }}" width="32" alt="icon">
+                            </div>
+
+                            <!-- Информация о переводе -->
+                            <p class="text-muted small mb-1">Время: {{tr.created_ad}}</p>
+                            
+                            {% if tr.send_card == user.card_number %}
+                                <p class="mb-0"><strong>Получатель:</strong> {{tr.receiver_card}}</p>
+                            {% else %}
+                                <p class="mb-0"><strong>Отправитель:</strong> {{tr.send_card}}</p>
+                            {% endif %}
+
+                            <!-- Кнопка отмены -->
+                            {% if tr.status == 'success' and tr.send_card == user.card_number %}
+                                <hr>
+                                <a href="{{url_for('cancellation', tr_id=tr.id)}}" class="btn btn-outline-danger btn-sm">Отменить перевод</a>
+                            {% endif %}
+
+                        </div>
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
     {% else %}
-        <h2>У вас нет истории<h2/>
+        <div class="alert alert-info" role="alert">
+            У вас пока нет истории операций.
+        </div>
     {% endif %}
 {% endblock main %}
