@@ -6,6 +6,7 @@ from decimal import Decimal
 from config import SQLALCHEMY_DATABASE_URI, SECRET_KEY
 from models import db, User, Transaction
 from auth_utils import login_required
+from DAO import get_all_users, get_user_for_evidence
 
 app = Flask(__name__)
 
@@ -26,9 +27,8 @@ def index():
 
 @app.route('/users')
 def get_users():
-    # СТАРЫЙ КОД: cursor.execute('SELECT * FROM users')
-    # НОВЫЙ КОД:
-    users_list = User.query.all() 
+    users_list = get_all_users()
+    print(type(users_list))
     return render_template('users.html', users=users_list, title='Пользователи')
 
 
@@ -44,11 +44,10 @@ def user_registration():
         raw_password = request.form.get('password')
 
         # Проверка: есть ли такой пользователь?
-        # SELECT * FROM users WHERE phone = ... OR email = ...
-        existing_user = User.query.filter(
-            or_(User.phone == phone, User.email == email)
-        ).first()
-
+        existing_user = get_user_for_evidence(phone=phone, email=email)
+        
+        print(existing_user)
+        
         if existing_user:
             return "Пользователь с таким телефоном или почтой уже есть!"
 
