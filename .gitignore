@@ -6,3 +6,5 @@ __pycache__
 .vscode
 gg.py
 test.py
+tasks.txt
+.pytest_cache

@@ -6,7 +6,7 @@ from decimal import Decimal
 from config import SQLALCHEMY_DATABASE_URI, SECRET_KEY
 from models import db, User, Transaction
 from auth_utils import login_required
-from DAO import get_all_users, get_user_for_evidence
+from DAO import get_all_users, get_user_for_evidence, create_new_user
 
 app = Flask(__name__)
 
@@ -44,80 +44,76 @@ def user_registration():
         raw_password = request.form.get('password')
 
         # Проверка: есть ли такой пользователь?
-        existing_user = get_user_for_evidence(phone=phone, email=email)
+        res, existing_user = get_user_for_evidence(phone=phone, email=email)        
         
-        print(existing_user)
-        
-        if existing_user:
-            return "Пользователь с таким телефоном или почтой уже есть!"
-
-        # Генерация данных
-        hashed_pw = generate_password_hash(raw_password)
-        card_num = str(random.randint(1000000000000000, 9999999999999999)) # 16 цифр
-
-        # Создание объекта (НОВАЯ МАГИЯ ✨)
-        new_user = User(
-            first_name=fname,
-            last_name=lname,
-            middle_name=mname,
-            phone=phone,
-            email=email,
-            password=hashed_pw,
-            card_number=card_num,
-            balance=0 # Начальный баланс
-        )
-
-        try:
-            db.session.add(new_user) # "Добавь в список задач"
-            db.session.commit()      # "Выполни SQL запрос INSERT"
+        if res:
+            if existing_user:
+                return "Пользователь с таким телефоном или почтой уже есть!"
             
-            # Авто-логин
+            # Генерация данных
+            hashed_pw = generate_password_hash(raw_password)
+            card_num = str(random.randint(1000000000000000, 9999999999999999)) # 16 цифр
+
+            res, new_user = create_new_user(
+                first_name=fname, 
+                last_name=lname, 
+                middle_name=mname, 
+                phone=phone, 
+                email=email,
+                password=hashed_pw,
+                card_number=card_num
+            )
+            
             session['user_id'] = new_user.id
             return redirect(url_for('profile'))
-            
-        except Exception as e:
-            db.session.rollback() # Если ошибка - отменяем
-            return f"Ошибка регистрации: {e}"
+
+        return f"Ошибка регистрации: {new_user}"
 
     return render_template('register.html', title='Регистрация')
 
 
 @app.route('/login', methods=['GET', 'POST'])
 def user_login():
+    
     msg = None
+    
     if request.method == 'POST':
-        login_input = request.form.get('login_input')
+    
+        email_or_phone_input = request.form.get('email_or_phone_input')
         password = request.form.get('password')
 
-        # Поиск пользователя (Email ИЛИ Phone)
-        # SELECT * FROM users WHERE (email=input OR phone=input) AND is_deleted=False
-        user = User.query.filter(
-            or_(User.email == login_input, User.phone == login_input),
-            User.is_deleted == False
-        ).first()
-
-        if user and check_password_hash(user.password, password):
-            session['user_id'] = user.id
-            return redirect(url_for('profile'))
-        elif user:
-            msg = "Неверный пароль"
-        else:
-            msg = "Неверный логин или пароль"
-
+        res, user = get_user_for_evidence(email=email_or_phone_input, phone=email_or_phone_input)
+        
+        if res == True:
+            if check_password_hash(user.password, password):
+                session['user_id'] = user.id
+                return redirect(url_for('profile'))
+            elif user:
+                msg = "Неверный пароль"
+            else:
+                msg = "Неверный логин или пароль"
+            
+        msg = f"Ошибка: {res}"
+        
     return render_template('login.html', invalid=msg)
 
 
 @app.route('/me')
 @login_required
 def profile():
+
     user_id = session.get('user_id')
-    user = db.session.get(User, user_id)
+    res, user = get_user_for_evidence(id=user_id)
 
-   # если пользователю больше не существует
-    if not user:
-        session.clear()
-        return redirect(url_for('user_login'))
-
+    if res:
+    # если пользователю больше не существует
+        if not user:
+            session.clear()
+            return redirect(url_for('user_login'))
+    
+    else:
+        return f"Ошибка: {user}"
+        
     return render_template('profile.html', user=user)
 
 

@@ -6,8 +6,8 @@
     method="post" означает "спрячь данные внутрь запроса" (не в адресной строке)
 -->
 <form action="{{ url_for('user_login') }}" method="POST">
-    <label for="login_input">Электронная почта или номер телефона</label>
-    <input input type="text" name="login_input" placeholder="+7... или mail@..." required>
+    <label for="email_or_phone_input">Электронная почта или номер телефона</label>
+    <input input type="text" name="email_or_phone_input" placeholder="+7... или mail@..." required>
     <br/><br/>
     <label for="password">Пароль</label>
     <input type="password" name="password" required>
