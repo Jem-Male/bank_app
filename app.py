@@ -82,18 +82,22 @@ def user_login():
         email_or_phone_input = request.form.get('email_or_phone_input')
         password = request.form.get('password')
 
-        res, user = get_user_for_evidence(email=email_or_phone_input, phone=email_or_phone_input)
+        result, user_or_error = get_user_for_evidence(email=email_or_phone_input, phone=email_or_phone_input)
         
-        if res == True:
-            if check_password_hash(user.password, password):
-                session['user_id'] = user.id
+        if (result == True) and (user_or_error is not None):
+
+            if check_password_hash(user_or_error.password, password):
+                session['user_id'] = user_or_error.id
                 return redirect(url_for('profile'))
-            elif user:
+
+            elif user_or_error:
                 msg = "Неверный пароль"
+
             else:
                 msg = "Неверный логин или пароль"
-            
-        msg = f"Ошибка: {res}"
+
+        else:
+            msg = f"Ошибка: {user_or_error}"
         
     return render_template('login.html', invalid=msg)
 
@@ -127,15 +131,18 @@ def transaction():
     
     if request.method == 'POST' and user_id:
         
-        send_user = db.session.get(User, user_id)
-        r_user = request.form.get('r_card')
-        revecide_user = User.query.filter_by(card_number = r_user).first()
+        r_user = request.form.get('r_card') 
         amount = request.form.get('amount')
         
-        if not revecide_user:
+        send_user = get_user_for_evidence(id=user_id)
+        revecide_user = get_user_for_evidence(card_number=r_user)
+        
+        if revecide_user is None:
             msg = "получатель не найден"
+            
         elif r_user == send_user.card_number:
             msg = "средства нельзя отправлять самому себе"
+        
         else:
             try:
                 amount = Decimal(amount)

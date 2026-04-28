@@ -20,13 +20,10 @@ def get_user_for_evidence(
             User.card_number == card_number
         ),User.is_deleted != True))
         
-        if user is None:
-            return False, object()
-        
         return True, user
     
     except Exception as e:
-        return e, object()
+        return False, e
 
 def create_new_user(*, first_name, last_name, middle_name, phone, email, password, card_number):
     
@@ -50,6 +47,9 @@ def create_new_user(*, first_name, last_name, middle_name, phone, email, passwor
         db.session.rollback() # Если ошибка - отменяем
         return False, f"Ошибка регистрации пользователя: {e}"
         
+
+def create_transaction():
+    
 
 
 # def create_

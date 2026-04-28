@@ -36,7 +36,7 @@ class User(db.Model):
     # Метод __repr__ нужен просто для красивого вывода в print()
     # Как DataAnalyzer, только для отладки
     def __repr__(self):
-        return f'<Created new user: id-{self.id}, name-{self.first_name} {self.last_name}, card-{self.card_number[-4:]}>'
+        return f'<User: id-{self.id}, name-{self.first_name} {self.last_name}, card-{self.card_number[-4:]}>'
     
     def to_dict(self):
         return {
