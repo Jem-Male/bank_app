@@ -11,3 +11,5 @@ if data is not False:
 elif:
     return False
 ```
+
+3. #### Implementing validation - Pydantic / Marshmallow
