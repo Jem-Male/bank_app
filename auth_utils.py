@@ -12,7 +12,7 @@ from flask import url_for, redirect, session
 # Итог: Flask доволен, у каждой ручки свое уникальное имя, хотя код проверки внутри один и тот же.
 from functools import wraps
 
-def login_required(func):    
+def login_required(func):
 
     @wraps(func)
     def wrapper(*args, **kwargs):

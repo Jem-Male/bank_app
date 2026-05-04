@@ -6,7 +6,7 @@ from decimal import Decimal
 from config import SQLALCHEMY_DATABASE_URI, SECRET_KEY
 from models import db, User, Transaction
 from auth_utils import login_required
-from DAO import get_all_users, get_user_for_evidence, create_new_user
+from DAO import get_all_users, get_user_for_evidence, create_new_user, process_transaction
 
 app = Flask(__name__)
 
@@ -28,7 +28,6 @@ def index():
 @app.route('/users')
 def get_users():
     users_list = get_all_users()
-    print(type(users_list))
     return render_template('users.html', users=users_list, title='Пользователи')
 
 
@@ -82,9 +81,12 @@ def user_login():
         email_or_phone_input = request.form.get('email_or_phone_input')
         password = request.form.get('password')
 
-        result, user_or_error = get_user_for_evidence(email=email_or_phone_input, phone=email_or_phone_input)
+        result_get_user, user_or_error = get_user_for_evidence(
+            email=email_or_phone_input, 
+            phone=email_or_phone_input
+        )
         
-        if (result == True) and (user_or_error is not None):
+        if (result_get_user == True) and (user_or_error is not None):
 
             if check_password_hash(user_or_error.password, password):
                 session['user_id'] = user_or_error.id
@@ -93,10 +95,12 @@ def user_login():
             elif user_or_error:
                 msg = "Неверный пароль"
 
-            else:
-                msg = "Неверный логин или пароль"
+        elif (result_get_user == True) and (user_or_error is None):
+            
+            msg = "Неверный логин или пароль"
 
-        else:
+        elif result_get_user == False:
+            
             msg = f"Ошибка: {user_or_error}"
         
     return render_template('login.html', invalid=msg)
@@ -107,77 +111,72 @@ def user_login():
 def profile():
 
     user_id = session.get('user_id')
-    res, user = get_user_for_evidence(id=user_id)
 
-    if res:
+    result_get_user, user_or_error = get_user_for_evidence(id=user_id)
+
+    if result_get_user:
     # если пользователю больше не существует
-        if not user:
+        if user_or_error is None:
             session.clear()
             return redirect(url_for('user_login'))
     
-    else:
-        return f"Ошибка: {user}"
-        
-    return render_template('profile.html', user=user)
+    elif not result_get_user and user_or_error:
+        return f"Ошибка: {user_or_error}"
+
+    return render_template('profile.html', user=user_or_error)
 
 
 @app.route('/transaction', methods=['GET','POST'])
 @login_required
 def transaction():
     
-    msg = None
-    succ = None
-    user_id = session.get('user_id')    
+    message_info  = None
+    success_info = None
+    user_id = session.get('user_id')
     
     if request.method == 'POST' and user_id:
         
         r_user = request.form.get('r_card') 
         amount = request.form.get('amount')
         
-        send_user = get_user_for_evidence(id=user_id)
-        revecide_user = get_user_for_evidence(card_number=r_user)
+        res_1, send_user = get_user_for_evidence(id=user_id)
+        res_2, revecide_user = get_user_for_evidence(card_number=r_user)
         
         if revecide_user is None:
-            msg = "получатель не найден"
+            message_info = "получатель не найден"
             
         elif r_user == send_user.card_number:
-            msg = "средства нельзя отправлять самому себе"
+            message_info = "средства нельзя отправлять самому себе"
         
         else:
             try:
                 amount = Decimal(amount)
                 if amount <=0:
-                    msg = "отправляемая сумма не может быть отрицательной"
-                    return render_template('transaction.html', user=send_user, message = msg, success = succ)
+                    message_info = "отправляемая сумма не может быть отрицательной"
+                    return render_template('transaction.html', user=send_user, message=message_info, success = success_info)
                 elif amount > send_user.balance:
-                    msg = "недостаточоно средств"
-                    return render_template('transaction.html', user=send_user, message = msg, success = succ)
+                    message_info = "недостаточоно средств"
+                    return render_template('transaction.html', user=send_user, message=message_info, success = success_info)
             except:
-                msg = "Ошибка ввода"
-                return render_template('transaction.html', user=send_user, message = msg, success = succ)
+                message_info = "Ошибка ввода"
+                return render_template('transaction.html', user=send_user, message=message_info, success = success_info)
             
-            try:
-                send_user.balance -= amount
-                revecide_user.balance += amount
+            result, data_or_error = process_transaction(amout=amount, revecide_user=revecide_user, send_user=send_user)
+            
+            if result:
+                print(data_or_error)
                 
-                new_transaction = Transaction(
-                    send_card = send_user.card_number,
-                    receiver_card = revecide_user.card_number,
-                    amount = amount
-                )
-                db.session.add(new_transaction)
-                db.session.commit()
-                msg = "Средства былы успешно переведены"
-                succ = True
-            except:
-                db.session.rollback()
-                msg = "Ошибка перевода"                
-    
-        return render_template('transaction.html', user=send_user, message = msg, success = succ)
+                success_info = True
+                message_info  = "Средства былы успешно переведены"
+            
+            else:
+                message_info  = "Ошибка перевода"
+
+        return render_template('transaction.html', user=send_user, message = message_info , success = success_info)
     
     
     user = db.session.get(User, user_id)
-    return render_template('transaction.html', user=user, message = msg, success = succ)  
+    return render_template('transaction.html', user=user, message = message_info , success = success_info)  
     
 
 @app.route('/history', methods=['GET'])

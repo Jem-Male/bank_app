@@ -1,5 +1,13 @@
 import pytest
-from DAO import create_new_user, get_user_for_evidence
+from DAO import (
+    get_all_users,
+    create_new_user, 
+    get_user_for_evidence, 
+    create_transaction_check, 
+    create_transaction_user,
+    process_transaction
+)
+
 from app import app, db 
 
 # with app.app_context():
@@ -16,11 +24,28 @@ from app import app, db
 # def test_add_a_new_user():
 #     assert res == False
     
+
+def get_a_user():
+    res, user = get_user_for_evidence(
+        email='a@e',
+        phone="a@e"
+    )
+    return user
+    # get_a_user()
+    
+# with app.app_context():
+#     user = get_a_user()
+#     print(user)
+
+# # 2 and 6
+
 with app.app_context():
-    def get_a_user():
-        res, user = get_user_for_evidence(
-            email='a@e',
-            phone="a@e"
-        )
-        print(res, user.password)
-    get_a_user()
+    
+    res, user_1_pass = get_user_for_evidence(id = 2)
+    res, user_2_take = get_user_for_evidence(id = 6)
+
+
+        
+    result, *data = process_transaction(amout=1000, revecide_user=user_2_take, send_user=user_1_pass)
+    
+    print(result,'\n',data)

@@ -36,7 +36,7 @@ class User(db.Model):
     # Метод __repr__ нужен просто для красивого вывода в print()
     # Как DataAnalyzer, только для отладки
     def __repr__(self):
-        return f'<User: id-{self.id}, name-{self.first_name} {self.last_name}, card-{self.card_number[-4:]}>'
+        return f'<User: id-{self.id}, name-{self.first_name} {self.last_name}, card-**** **** **** {self.card_number[:4]}>'
     
     def to_dict(self):
         return {
@@ -72,7 +72,7 @@ class Transaction(db.Model):
     created_ad = db.Column(db.DateTime, server_default = db.func.now())
     
     def __repr__(self):
-        return f"new transaction create: id: {self.id}, status: {self.status}"
+        return f"Transaction id: {self.id}, status: {self.status}"
     
     def get_dict(self):
         return {
